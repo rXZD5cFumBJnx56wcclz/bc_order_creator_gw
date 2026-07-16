@@ -1,0 +1,13 @@
+[package]
+name = "bc_order_creator_gw"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bc_utils_lg = {path = "../bc_utils_lg"}
+
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+pretty_assertions = "1"
+criterion = {version = "0.8", features = ["html_reports"]}
