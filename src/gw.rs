@@ -49,15 +49,18 @@ impl OrderCreatorsGateway<'_> {
         self.s
             .iter()
             .map(|(k, setting)| {
+                let qty = res_utils_state[setting.used_util_state.as_str()];
                 (
                     k.as_str(),
                     unsafe { &*self.order_creator }[k.as_str()].create_order(
                         symbol,
                         &setting.type_,
                         &signals[setting.used_signal.as_str()],
-                        res_utils_state[setting.used_util_state.as_str()],
+                        qty,
+                        qty * setting.commission,
                         setting.is_reduce,
                         setting.include_in_storage,
+                        &setting.type_price_cross,
                         if setting.used_ind.is_some() {
                             Some(indications[setting.used_ind.as_ref().unwrap().as_str()])
                         } else {
@@ -134,6 +137,8 @@ mod tests {
                         leverage: 1.,
                         position_idx: 1,
                         is_active: true,
+                        type_price_cross: "last".to_string(),
+                        commission: 0.001,
                         ..Default::default()
                     },
                     Default::default(),
