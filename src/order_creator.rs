@@ -11,7 +11,11 @@ pub struct OrderCreator {
 
 impl Default for OrderCreator {
     fn default() -> Self {
-        Self { signal_long: 1., signal_short: -1., leverage: 1. }
+        Self {
+            signal_long: 1.,
+            signal_short: -1.,
+            leverage: 1.,
+        }
     }
 }
 
