@@ -9,33 +9,6 @@ use bc_utils_lg::{
 
 use crate::order_creator::OrderCreator;
 
-pub type OrderCreators<'a> = MAP<&'a str, OrderCreator>;
-
-pub trait OrderCreatorsExt<'a> {
-    fn new(s: &'a SETTINGS_ORDER_CREATORS) -> Self;
-}
-
-impl<'a> OrderCreatorsExt<'a> for OrderCreators<'a> {
-    fn new(s: &'a SETTINGS_ORDER_CREATORS) -> Self {
-        get_map(s)
-    }
-}
-
-#[derive(Default)]
-pub struct OrderCreatorsGateway<'a> {
-    pub order_creators: *const OrderCreators<'a>,
-    s: *const SETTINGS_ORDER_CREATORS,
-}
-
-impl<'a> OrderCreatorsGateway<'a> {
-    pub fn new(
-        order_creators: *const MAP<&'a str, OrderCreator>,
-        s: *const SETTINGS_ORDER_CREATORS,
-    ) -> Self {
-        Self { s, order_creators }
-    }
-}
-
 pub fn get_map(s: &SETTINGS_ORDER_CREATORS) -> MAP<&str, OrderCreator> {
     s.iter()
         .map(|(k, v)| {
@@ -51,21 +24,30 @@ pub fn get_map(s: &SETTINGS_ORDER_CREATORS) -> MAP<&str, OrderCreator> {
         .collect()
 }
 
-impl<'a> OrderCreatorsGateway<'a> {
+#[derive(Default)]
+pub struct OrderCreators<'a>(pub MAP<&'a str, OrderCreator>);
+
+impl<'a> OrderCreators<'a> {
+    pub fn new(s: &'a SETTINGS_ORDER_CREATORS) -> Self {
+        Self(get_map(s))
+    }
+}
+
+impl<'a> OrderCreators<'a> {
     pub fn series(
         &self,
+        s: &'a SETTINGS_ORDER_CREATORS,
         symbol: &str,
         signals: &MAP<&str, Signal>,
         indications: &MAP<&str, f64>,
         res_utils_state: &MAP<&str, f64>,
     ) -> MAP<&'a str, (Order, bool, Option<Trigger>)> {
-        unsafe { &*self.s }
-            .iter()
+        s.iter()
             .map(|(k, setting)| {
                 let qty = res_utils_state[setting.used_util_state.as_str()];
                 (
                     k.as_str(),
-                    unsafe { &*self.order_creators }[k.as_str()].create_order(
+                    self.0[k.as_str()].create_order(
                         symbol,
                         &setting.type_,
                         &signals[setting.used_signal.as_str()],
@@ -130,14 +112,13 @@ mod tests {
 
     #[test]
     fn series_res_1() {
-        let map = get_map(&S);
+        let order_creators = OrderCreators::new(&S);
         let bind1 = MAP::from_iter([("signal_1", Signal::new(1., 1.))]);
         let bind2 = Default::default();
         let bind3 = MAP::from_iter([("qty_1", 1.)]);
-        let bind4 = OrderCreatorsGateway::new(&map, &*S);
         assert_eq_pr!(
             {
-                let mut bind = bind4.series("", &bind1, &bind2, &bind3);
+                let mut bind = order_creators.series(&S, "", &bind1, &bind2, &bind3);
                 bind.get_mut("order_creator_1").unwrap().0.order_link_id = "".to_string();
                 bind
             },
