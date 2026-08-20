@@ -1,144 +1,127 @@
+use bc_utils_lg::structs::settings::{SETTINGS_ORDER_CREATOR, SETTINGS_TRADE};
 use bc_utils_lg::{
     structs::{
-        settings::SETTINGS_ORDER_CREATORS,
+        settings::{SETTINGS_ORDER_CREATORS, SETTINGS_TRIGGER_OUT_OF_STORAGE},
         signals::Signal,
-        trade::{Order, StateValues, Trigger},
+        trade::{Order, Trigger},
     },
     types::maps::MAP,
 };
+// use uuid::Uuid;
 
-use crate::order_creator::OrderCreator;
+fn create_trigger(
+    s: &SETTINGS_TRIGGER_OUT_OF_STORAGE,
+    ind: &MAP<&str, f64>,
+    utils: &MAP<&str, f64>,
+) -> Option<Trigger> {
+    Some(Trigger {
+        price: ind[s.used_ind.as_str()],
+        trigger_by: s.trigger_by.clone(),
+        direction: utils[s.used_util_state.as_str()] as usize,
+    })
+}
 
-pub fn get_map(s: &SETTINGS_ORDER_CREATORS) -> MAP<&str, OrderCreator> {
+pub fn create_order(
+    symbol: &str,
+    signals: &MAP<&str, Signal>,
+    ind: &MAP<&str, f64>,
+    utils: &MAP<&str, f64>,
+    s_order_creator: &SETTINGS_ORDER_CREATOR,
+    s_trade: &SETTINGS_TRADE,
+) -> (Order, bool, Option<Trigger>) {
+    let signal = signals[s_order_creator.used_signal.as_str()];
+    let price = ind
+        .get(
+            s_order_creator
+                .used_ind
+                .as_ref()
+                .unwrap_or(&"".to_string())
+                .as_str(),
+        )
+        .copied();
+    let qty = utils[s_order_creator.used_util_state.as_str()];
+    let position_idx = if signal.signal == s_trade.signal_long {
+        1
+    } else {
+        2
+    };
+    (
+        Order::new(
+            symbol.to_string(),
+            if signal.signal == s_trade.signal_long {
+                "buy".to_string()
+            } else if signal.signal == s_trade.signal_short {
+                "sell".to_string()
+            } else {
+                "hold".to_string()
+            },
+            qty,
+            qty * if s_order_creator.type_ == "market" {
+                s_trade.commission_market
+            } else {
+                s_trade.commission_limit
+            },
+            s_order_creator.leverage,
+            price,
+            s_order_creator.type_.clone(),
+            s_order_creator.is_reduce,
+            s_order_creator.type_price_cross.to_string(),
+            // Uuid::new_v4().to_string(),
+            String::default(),
+            position_idx,
+            true,
+        ),
+        s_order_creator.include_in_storage,
+        if s_order_creator.include_in_storage {
+            create_trigger(s_order_creator.trigger.as_ref().unwrap(), ind, utils)
+        } else {
+            None
+        },
+    )
+}
+
+pub fn series<'a>(
+    s: &'a SETTINGS_ORDER_CREATORS,
+    s_trade: &SETTINGS_TRADE,
+    symbol: &str,
+    signals: &MAP<&str, Signal>,
+    indications: &MAP<&str, f64>,
+    res_utils_state: &MAP<&str, f64>,
+) -> MAP<&'a str, (Order, bool, Option<Trigger>)> {
     s.iter()
-        .map(|(k, v)| {
+        .map(|(k, setting)| {
             (
                 k.as_str(),
-                OrderCreator {
-                    signal_long: v.signal_long,
-                    signal_short: v.signal_short,
-                    leverage: v.leverage,
-                },
+                create_order(
+                    symbol,
+                    signals,
+                    indications,
+                    res_utils_state,
+                    setting,
+                    s_trade,
+                ),
             )
         })
         .collect()
 }
 
-#[derive(Default)]
-pub struct OrderCreators<'a>(pub MAP<&'a str, OrderCreator>);
-
-impl<'a> OrderCreators<'a> {
-    pub fn new(s: &'a SETTINGS_ORDER_CREATORS) -> Self {
-        Self(get_map(s))
-    }
-}
-
-impl<'a> OrderCreators<'a> {
-    pub fn series(
-        &self,
-        s: &'a SETTINGS_ORDER_CREATORS,
-        symbol: &str,
-        signals: &MAP<&str, Signal>,
-        indications: &MAP<&str, f64>,
-        res_utils_state: &MAP<&str, f64>,
-    ) -> MAP<&'a str, (Order, bool, Option<Trigger>)> {
-        s.iter()
-            .map(|(k, setting)| {
-                let qty = res_utils_state[setting.used_util_state.as_str()];
-                (
-                    k.as_str(),
-                    self.0[k.as_str()].create_order(
-                        symbol,
-                        &setting.type_,
-                        &signals[setting.used_signal.as_str()],
-                        qty,
-                        qty * setting.commission,
-                        setting.is_reduce,
-                        setting.include_in_storage,
-                        &setting.type_price_cross,
-                        if setting.used_ind.is_some() {
-                            Some(indications[setting.used_ind.as_ref().unwrap().as_str()])
-                        } else {
-                            None
-                        },
-                        if setting.trigger.is_some() {
-                            Some({
-                                let setting_trigger = setting.trigger.as_ref().unwrap();
-                                Trigger {
-                                    price: indications[setting_trigger.used_ind.as_str()],
-                                    trigger_by: setting_trigger.trigger_by.to_string(),
-                                    direction: res_utils_state
-                                        [setting_trigger.used_util_state.as_str()]
-                                        as usize,
-                                }
-                            })
-                        } else {
-                            None
-                        },
-                        if setting.state_values.is_some() {
-                            let stat_values = setting.state_values.as_ref().unwrap();
-                            Some(StateValues {
-                                qty_percent_of_position: stat_values.qty_percent_of_position,
-                            })
-                        } else {
-                            None
-                        },
-                    ),
-                )
-            })
-            .collect()
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::LazyLock;
-
     use super::*;
-
-    use bc_utils_lg::structs::settings::SETTINGS_ORDER_CREATOR;
-    use pretty_assertions::assert_eq as assert_eq_pr;
-
-    static S: LazyLock<SETTINGS_ORDER_CREATORS> = LazyLock::new(|| {
-        SETTINGS_ORDER_CREATORS::from_iter([(
-            "order_creator_1".to_string(),
-            SETTINGS_ORDER_CREATOR {
-                used_signal: "signal_1".to_string(),
-                used_util_state: "qty_1".to_string(),
-                ..Default::default()
-            },
-        )])
-    });
+    use bc_test_kit::prelude::*;
 
     #[test]
     fn series_res_1() {
-        let order_creators = OrderCreators::new(&S);
-        let bind1 = MAP::from_iter([("signal_1", Signal::new(1., 1.))]);
-        let bind2 = Default::default();
-        let bind3 = MAP::from_iter([("qty_1", 1.)]);
         assert_eq_pr!(
-            {
-                let mut bind = order_creators.series(&S, "", &bind1, &bind2, &bind3);
-                bind.get_mut("order_creator_1").unwrap().0.order_link_id = "".to_string();
-                bind
-            },
-            MAP::from_iter([(
-                "order_creator_1",
-                (
-                    Order {
-                        qty: 1.,
-                        side: "buy".to_string(),
-                        leverage: 1.,
-                        position_idx: 1,
-                        is_active: true,
-                        type_price_cross: "last".to_string(),
-                        commission: 0.001,
-                        ..Default::default()
-                    },
-                    Default::default(),
-                    Default::default()
-                )
-            )])
-        );
+            &series(
+                &ORDER_CREATORS,
+                &TRADE,
+                "",
+                &SIGNALS_STATE,
+                &INDICATIONS_STATE,
+                &UTILS_STATE_STATE,
+            ),
+            &*ORDER_CREATOR_STATE
+        )
     }
 }

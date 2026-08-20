@@ -1,6 +1,6 @@
 [package]
 name = "bc_order_creator_gw"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
@@ -9,5 +9,7 @@ bc_utils_lg = {path = "../bc_utils_lg"}
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
+bc_test_kit = {path = "../bc_test_kit"}
+
 pretty_assertions = "1"
 criterion = {version = "0.8", features = ["html_reports"]}
