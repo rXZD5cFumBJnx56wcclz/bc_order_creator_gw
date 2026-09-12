@@ -1,4 +1,5 @@
 use bc_utils_lg::structs::settings::{SETTINGS_ORDER_CREATOR, SETTINGS_TRADE};
+use bc_utils_lg::structs::trade::OrderWrap;
 use bc_utils_lg::{
     structs::{
         settings::{SETTINGS_ORDER_CREATORS, SETTINGS_TRIGGER_OUT_OF_STORAGE},
@@ -28,7 +29,7 @@ pub fn create_order(
     utils: &MAP<&str, f64>,
     s_order_creator: &SETTINGS_ORDER_CREATOR,
     s_trade: &SETTINGS_TRADE,
-) -> (Order, bool, Option<Trigger>) {
+) -> OrderWrap {
     let signal = signals[s_order_creator.used_signal.as_str()];
     let price = ind
         .get(
@@ -45,8 +46,8 @@ pub fn create_order(
     } else {
         2
     };
-    (
-        Order::new(
+    OrderWrap {
+        order: Order::new(
             symbol.to_string(),
             if signal.signal == s_trade.signal_long {
                 "buy".to_string()
@@ -71,13 +72,13 @@ pub fn create_order(
             position_idx,
             true,
         ),
-        s_order_creator.include_in_storage,
-        if s_order_creator.include_in_storage {
+        is_trigger: s_order_creator.include_in_storage,
+        trigger: if s_order_creator.include_in_storage {
             create_trigger(s_order_creator.trigger.as_ref().unwrap(), ind, utils)
         } else {
             None
         },
-    )
+    }
 }
 
 pub fn series<'a>(
@@ -87,7 +88,7 @@ pub fn series<'a>(
     signals: &MAP<&str, Signal>,
     indications: &MAP<&str, f64>,
     res_utils_state: &MAP<&str, f64>,
-) -> MAP<&'a str, (Order, bool, Option<Trigger>)> {
+) -> MAP<&'a str, OrderWrap> {
     s.iter()
         .map(|(k, setting)| {
             (
