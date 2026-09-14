@@ -1,10 +1,11 @@
 [package]
 name = "bc_order_creator_gw"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2024"
 
 [dependencies]
 bc_utils_lg = {path = "../bc_utils_lg"}
+bc_trade_state = {path = "../bc_trade_state"}
 
 uuid = { version = "1", features = ["v4"] }
 
